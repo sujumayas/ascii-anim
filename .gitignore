@@ -19,8 +19,20 @@ env/
 uploads/*
 !uploads/.gitkeep
 
-# Test images
+# Frames directory (keep the folder but ignore contents)
+frames/*
+!frames/.gitkeep
+
+# Test files
 test_image.png
+test_frame.png
+
+# Sample videos (too large for git)
+*.mp4
+*.avi
+*.mov
+*.webm
+*.mkv
 
 # Logs
 *.log

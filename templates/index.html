@@ -10,10 +10,19 @@
     <div class="container">
         <header>
             <h1>ASCII Art Generator</h1>
-            <p class="subtitle">Convert images to ASCII art using 5 different algorithms</p>
+            <p class="subtitle">Convert images and videos to ASCII art</p>
         </header>
 
-        <main>
+        <!-- Tab Navigation -->
+        <div class="tab-nav">
+            <button class="tab-btn active" data-tab="image">Image to ASCII</button>
+            <button class="tab-btn" data-tab="video">Video Frame Extractor</button>
+            <button class="tab-btn" data-tab="bulk">Bulk Convert Frames</button>
+            <button class="tab-btn" data-tab="animation">Animation Player</button>
+        </div>
+
+        <!-- IMAGE TAB -->
+        <main id="imageTab" class="tab-content active">
             <div class="controls-panel">
                 <div class="upload-section">
                     <h2>Upload Image</h2>
@@ -84,6 +93,285 @@
                 </div>
             </div>
         </main>
+
+        <!-- VIDEO TAB -->
+        <main id="videoTab" class="tab-content">
+            <div class="controls-panel">
+                <div class="upload-section">
+                    <h2>Upload Video</h2>
+                    <div class="drop-zone" id="videoDropZone">
+                        <input type="file" id="videoInput" accept="video/*" hidden>
+                        <div class="drop-zone-content">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                            </svg>
+                            <p>Drag & drop a video here or <span class="browse-link">browse</span></p>
+                            <span class="file-types">MP4, AVI, MOV, WEBM, MKV</span>
+                        </div>
+                    </div>
+                    <div class="video-info" id="videoInfo" hidden>
+                        <img id="videoPreview" alt="Video Preview">
+                        <div class="video-meta">
+                            <p><strong>Resolution:</strong> <span id="videoResolution"></span></p>
+                            <p><strong>Duration:</strong> <span id="videoDuration"></span>s</p>
+                            <p><strong>FPS:</strong> <span id="videoFps"></span></p>
+                            <p><strong>Frames:</strong> <span id="videoFrames"></span></p>
+                        </div>
+                        <button id="clearVideo" class="btn-secondary">Clear</button>
+                    </div>
+                </div>
+
+                <div class="green-screen-section">
+                    <h2>Green Screen Settings</h2>
+                    <div class="option-group">
+                        <label>Hue Center (green = 60)</label>
+                        <input type="range" id="hueCenter" min="0" max="180" value="60">
+                        <span class="range-value" id="hueCenterValue">60</span>
+                    </div>
+                    <div class="option-group">
+                        <label>Hue Tolerance</label>
+                        <input type="range" id="hueTolerance" min="10" max="60" value="30">
+                        <span class="range-value" id="hueToleranceValue">30</span>
+                    </div>
+                    <div class="option-group">
+                        <label>Saturation Min</label>
+                        <input type="range" id="saturationMin" min="0" max="150" value="40">
+                        <span class="range-value" id="saturationMinValue">40</span>
+                    </div>
+                    <div class="option-group">
+                        <label>Background Replacement</label>
+                        <select id="bgReplacement">
+                            <option value="transparent">Transparent (PNG)</option>
+                            <option value="white" selected>White</option>
+                            <option value="black">Black</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="extraction-section">
+                    <h2>Frame Extraction</h2>
+                    <div class="option-group">
+                        <label>Target FPS</label>
+                        <input type="number" id="targetFps" value="12" min="1" max="60">
+                    </div>
+                    <div class="option-group">
+                        <label>Max Frames (optional)</label>
+                        <input type="number" id="maxFrames" placeholder="All frames">
+                    </div>
+                </div>
+
+                <div class="video-actions">
+                    <button id="previewBtn" class="btn-secondary" disabled>Preview Frame</button>
+                    <button id="extractBtn" class="btn-primary" disabled>
+                        <span class="btn-text">Extract Frames (ZIP)</span>
+                        <span class="btn-loading" hidden>Extracting...</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="output-panel">
+                <div class="output-header">
+                    <h2>Preview</h2>
+                </div>
+                <div class="preview-output">
+                    <div class="preview-comparison" id="previewComparison" hidden>
+                        <div class="preview-item">
+                            <h3>Original</h3>
+                            <img id="originalFrame" alt="Original">
+                        </div>
+                        <div class="preview-item">
+                            <h3>Green Screen Removed</h3>
+                            <img id="processedFrame" alt="Processed">
+                        </div>
+                    </div>
+                    <div class="preview-placeholder" id="previewPlaceholder">
+                        <p>Upload a video and click "Preview Frame" to see green screen removal</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- BULK CONVERT TAB -->
+        <main id="bulkTab" class="tab-content">
+            <div class="controls-panel">
+                <div class="upload-section">
+                    <h2>Upload Frames ZIP</h2>
+                    <div class="drop-zone" id="bulkDropZone">
+                        <input type="file" id="bulkInput" accept=".zip" hidden>
+                        <div class="drop-zone-content">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            <p>Drag & drop a ZIP with frames or <span class="browse-link">browse</span></p>
+                            <span class="file-types">ZIP containing PNG, JPG frames (e.g., frame_0000.png)</span>
+                        </div>
+                    </div>
+                    <div class="bulk-info" id="bulkInfo" hidden>
+                        <img id="bulkPreview" alt="First Frame Preview">
+                        <div class="video-meta">
+                            <p><strong>Frames:</strong> <span id="bulkFrameCount"></span></p>
+                            <p><strong>Files:</strong> <span id="bulkFileList"></span></p>
+                        </div>
+                        <button id="clearBulk" class="btn-secondary">Clear</button>
+                    </div>
+                </div>
+
+                <div class="converter-section">
+                    <h2>Choose Converter</h2>
+                    <div class="converter-list" id="bulkConverterList">
+                        {% for conv in converters %}
+                        <label class="converter-option">
+                            <input type="radio" name="bulkConverter" value="{{ conv.id }}"
+                                   {% if loop.first %}checked{% endif %}>
+                            <div class="converter-card">
+                                <h3>{{ conv.name }}</h3>
+                                <p>{{ conv.description }}</p>
+                            </div>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="options-section">
+                    <h2>Options</h2>
+                    <div id="bulkOptionsContainer">
+                        <!-- Options will be loaded dynamically -->
+                    </div>
+                </div>
+
+                <div class="video-actions">
+                    <button id="bulkPreviewBtn" class="btn-secondary" disabled>Preview First Frame</button>
+                    <button id="bulkConvertBtn" class="btn-primary" disabled>
+                        <span class="btn-text">Convert All Frames (ZIP)</span>
+                        <span class="btn-loading" hidden>Converting...</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="output-panel">
+                <div class="output-header">
+                    <h2>ASCII Preview</h2>
+                    <div class="output-actions" id="bulkOutputActions" hidden>
+                        <label class="font-size-control">
+                            Font size:
+                            <input type="range" id="bulkFontSizeSlider" min="4" max="16" value="6">
+                            <span id="bulkFontSizeValue">6px</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="bulk-preview-output">
+                    <div class="bulk-preview-comparison" id="bulkPreviewComparison" hidden>
+                        <div class="preview-item bulk-original">
+                            <h3>Original Frame</h3>
+                            <img id="bulkOriginalFrame" alt="Original">
+                        </div>
+                        <div class="preview-item bulk-ascii">
+                            <h3>ASCII Output</h3>
+                            <pre id="bulkAsciiOutput" class="ascii-output"></pre>
+                        </div>
+                    </div>
+                    <div class="preview-placeholder" id="bulkPreviewPlaceholder">
+                        <p>Upload a ZIP with frames and click "Preview First Frame" to see the conversion</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- ANIMATION PLAYER TAB -->
+        <main id="animationTab" class="tab-content">
+            <div class="controls-panel">
+                <div class="upload-section">
+                    <h2>Upload ASCII Frames ZIP</h2>
+                    <div class="drop-zone" id="animDropZone">
+                        <input type="file" id="animInput" accept=".zip" hidden>
+                        <div class="drop-zone-content">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                            </svg>
+                            <p>Drag & drop a ZIP with ASCII frames or <span class="browse-link">browse</span></p>
+                            <span class="file-types">ZIP containing .txt files (e.g., frame_0000.txt, frame_0001.txt)</span>
+                        </div>
+                    </div>
+                    <div class="anim-info" id="animInfo" hidden>
+                        <div class="video-meta">
+                            <p><strong>Frames:</strong> <span id="animFrameCount"></span></p>
+                            <p><strong>Dimensions:</strong> <span id="animDimensions"></span></p>
+                        </div>
+                        <button id="clearAnim" class="btn-secondary">Clear</button>
+                    </div>
+                </div>
+
+                <div class="playback-section">
+                    <h2>Playback Settings</h2>
+                    <div class="option-group">
+                        <label>FPS (Frames Per Second)</label>
+                        <input type="range" id="animFps" min="1" max="30" value="12">
+                        <span class="range-value" id="animFpsValue">12</span>
+                    </div>
+                    <div class="option-group">
+                        <label>Font Size</label>
+                        <input type="range" id="animFontSize" min="4" max="16" value="6">
+                        <span class="range-value" id="animFontSizeValue">6px</span>
+                    </div>
+                </div>
+
+                <div class="playback-controls">
+                    <button id="playPauseBtn" class="btn-primary" disabled>
+                        <span id="playIcon">▶ Play</span>
+                    </button>
+                    <button id="stopBtn" class="btn-secondary" disabled>■ Stop</button>
+                </div>
+
+                <div class="frame-info" id="frameInfo" hidden>
+                    <p>Frame: <span id="currentFrameNum">0</span> / <span id="totalFrameNum">0</span></p>
+                </div>
+
+                <div class="export-section">
+                    <h2>Export Code</h2>
+                    <p class="export-hint">Get code to use this animation in your projects</p>
+                    <div class="export-buttons">
+                        <button id="exportHtmlBtn" class="btn-secondary" disabled>HTML/JS</button>
+                        <button id="exportReactBtn" class="btn-secondary" disabled>React</button>
+                        <button id="exportPythonBtn" class="btn-secondary" disabled>Python</button>
+                        <button id="exportPygameBtn" class="btn-secondary" disabled>Pygame</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="output-panel">
+                <div class="output-header">
+                    <h2>Animation Preview</h2>
+                </div>
+                <div class="animation-output">
+                    <div class="animation-display" id="animationDisplay">
+                        <pre id="animAsciiOutput" class="ascii-output animation-ascii"></pre>
+                    </div>
+                    <div class="animation-placeholder" id="animPlaceholder">
+                        <p>Upload a ZIP with ASCII text frames to preview the animation</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Code Export Modal -->
+        <div class="modal" id="codeModal" hidden>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modalTitle">Export Code</h3>
+                    <button class="modal-close" id="closeModal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <pre id="codeOutput" class="code-output"></pre>
+                </div>
+                <div class="modal-footer">
+                    <button id="copyCodeBtn" class="btn-primary">Copy Code</button>
+                    <button id="downloadCodeBtn" class="btn-secondary">Download</button>
+                </div>
+            </div>
+        </div>
 
         <footer>
             <p>Built with Flask, PIL, OpenCV, and NumPy</p>
