@@ -5,13 +5,18 @@ A web application that converts images to ASCII art using
 multiple algorithms: brightness mapping, edge detection,
 Sobel gradients, block characters, and dithering.
 
-Also includes video frame extraction with green screen removal.
+Also includes video frame extraction with green screen removal,
+and real-time screen capture to ASCII streaming.
 """
 import os
 import uuid
 import base64
+import io
 import cv2
+import numpy as np
+from PIL import Image
 from flask import Flask, render_template, request, jsonify, send_file
+from flask_socketio import SocketIO, emit
 from werkzeug.utils import secure_filename
 
 from converters import (
@@ -24,6 +29,10 @@ from converters import (
 from converters.video_processor import VideoProcessor, GreenScreenSettings
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'ascii-art-secret-key'
+
+# Initialize SocketIO with gevent for WebSocket support
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 # Configuration
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
@@ -1012,5 +1021,194 @@ sys.exit()
     })
 
 
+# ============== LIVE SCREEN CAPTURE (WebSocket) ==============
+
+# Store active streaming sessions
+streaming_sessions = {}
+
+
+def process_frame_to_ascii(image_data, converter_id, width, options=None):
+    """
+    Process a base64 image frame and convert it to ASCII art.
+
+    Args:
+        image_data: Base64 encoded image data (with or without data URL prefix)
+        converter_id: ID of the converter to use
+        width: Output width in characters
+        options: Additional converter options
+
+    Returns:
+        ASCII art string
+    """
+    try:
+        # Remove data URL prefix if present
+        if ',' in image_data:
+            image_data = image_data.split(',')[1]
+
+        # Decode base64 to image
+        image_bytes = base64.b64decode(image_data)
+        image = Image.open(io.BytesIO(image_bytes))
+
+        # Convert to RGB if necessary
+        if image.mode == 'RGBA':
+            # Create white background
+            background = Image.new('RGB', image.size, (255, 255, 255))
+            background.paste(image, mask=image.split()[3])
+            image = background
+        elif image.mode != 'RGB':
+            image = image.convert('RGB')
+
+        # Save to temporary file for converter
+        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f"stream_{uuid.uuid4()}.jpg")
+        image.save(temp_path, 'JPEG', quality=85)
+
+        try:
+            # Get converter
+            if converter_id not in CONVERTERS:
+                converter_id = 'brightness'
+            converter = CONVERTERS[converter_id]
+
+            # Build options
+            convert_options = {'width': width}
+            if options:
+                convert_options.update(options)
+
+            # Convert to ASCII
+            ascii_art = converter.convert(temp_path, **convert_options)
+            return ascii_art
+
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    except Exception as e:
+        return f"Error processing frame: {str(e)}"
+
+
+@socketio.on('connect')
+def handle_connect():
+    """Handle client connection."""
+    print(f"Client connected: {request.sid}")
+    emit('connected', {'status': 'connected', 'sid': request.sid})
+
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handle client disconnection."""
+    print(f"Client disconnected: {request.sid}")
+    # Clean up any streaming session
+    if request.sid in streaming_sessions:
+        del streaming_sessions[request.sid]
+
+
+@socketio.on('start_stream')
+def handle_start_stream(data):
+    """
+    Start a streaming session.
+
+    Expected data:
+    - converter: Converter ID
+    - width: ASCII output width
+    - options: Converter-specific options
+    """
+    converter_id = data.get('converter', 'brightness')
+    width = data.get('width', 80)
+    options = data.get('options', {})
+
+    streaming_sessions[request.sid] = {
+        'converter': converter_id,
+        'width': width,
+        'options': options,
+        'frame_count': 0
+    }
+
+    emit('stream_started', {
+        'status': 'started',
+        'converter': converter_id,
+        'width': width
+    })
+    print(f"Stream started for {request.sid}: {converter_id}, width={width}")
+
+
+@socketio.on('stop_stream')
+def handle_stop_stream():
+    """Stop the streaming session."""
+    if request.sid in streaming_sessions:
+        frame_count = streaming_sessions[request.sid].get('frame_count', 0)
+        del streaming_sessions[request.sid]
+        emit('stream_stopped', {'status': 'stopped', 'total_frames': frame_count})
+        print(f"Stream stopped for {request.sid}, total frames: {frame_count}")
+
+
+@socketio.on('frame')
+def handle_frame(data):
+    """
+    Process a single frame from the screen capture.
+
+    Expected data:
+    - image: Base64 encoded image data
+    - timestamp: Optional timestamp for the frame
+    """
+    if request.sid not in streaming_sessions:
+        emit('error', {'message': 'No active stream session'})
+        return
+
+    session = streaming_sessions[request.sid]
+    image_data = data.get('image')
+
+    if not image_data:
+        emit('error', {'message': 'No image data received'})
+        return
+
+    # Process the frame
+    ascii_art = process_frame_to_ascii(
+        image_data,
+        session['converter'],
+        session['width'],
+        session.get('options')
+    )
+
+    session['frame_count'] += 1
+
+    # Send back the ASCII result
+    emit('ascii_frame', {
+        'ascii': ascii_art,
+        'frame_number': session['frame_count'],
+        'timestamp': data.get('timestamp')
+    })
+
+
+@socketio.on('update_settings')
+def handle_update_settings(data):
+    """
+    Update streaming settings on the fly.
+
+    Expected data:
+    - converter: New converter ID (optional)
+    - width: New width (optional)
+    - options: New converter options (optional)
+    """
+    if request.sid not in streaming_sessions:
+        emit('error', {'message': 'No active stream session'})
+        return
+
+    session = streaming_sessions[request.sid]
+
+    if 'converter' in data:
+        session['converter'] = data['converter']
+    if 'width' in data:
+        session['width'] = data['width']
+    if 'options' in data:
+        session['options'] = data['options']
+
+    emit('settings_updated', {
+        'converter': session['converter'],
+        'width': session['width'],
+        'options': session.get('options', {})
+    })
+
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    # Use socketio.run instead of app.run for WebSocket support
+    socketio.run(app, debug=True, host='0.0.0.0', port=5001)

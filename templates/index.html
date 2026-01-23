@@ -19,6 +19,7 @@
             <button class="tab-btn" data-tab="video">Video Frame Extractor</button>
             <button class="tab-btn" data-tab="bulk">Bulk Convert Frames</button>
             <button class="tab-btn" data-tab="animation">Animation Player</button>
+            <button class="tab-btn" data-tab="live">Live Screen Capture</button>
         </div>
 
         <!-- IMAGE TAB -->
@@ -356,6 +357,95 @@
             </div>
         </main>
 
+        <!-- LIVE SCREEN CAPTURE TAB -->
+        <main id="liveTab" class="tab-content">
+            <div class="controls-panel">
+                <div class="stream-section">
+                    <h2>Screen Capture</h2>
+                    <p class="stream-hint">Capture your screen or a window and convert it to ASCII art in real-time</p>
+
+                    <div class="stream-status" id="streamStatus">
+                        <span class="status-dot disconnected"></span>
+                        <span id="statusText">Disconnected</span>
+                    </div>
+
+                    <div class="stream-controls">
+                        <button id="startCaptureBtn" class="btn-primary">
+                            <span class="btn-text">📺 Start Screen Capture</span>
+                        </button>
+                        <button id="stopCaptureBtn" class="btn-secondary" disabled>
+                            <span class="btn-text">⏹ Stop Capture</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="converter-section">
+                    <h2>Choose Converter</h2>
+                    <div class="converter-list" id="liveConverterList">
+                        {% for conv in converters %}
+                        <label class="converter-option">
+                            <input type="radio" name="liveConverter" value="{{ conv.id }}"
+                                   {% if loop.first %}checked{% endif %}>
+                            <div class="converter-card">
+                                <h3>{{ conv.name }}</h3>
+                                <p>{{ conv.description }}</p>
+                            </div>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="options-section">
+                    <h2>Stream Settings</h2>
+                    <div class="option-group">
+                        <label>ASCII Width (characters)</label>
+                        <input type="range" id="liveWidth" min="40" max="1000" value="100">
+                        <span class="range-value" id="liveWidthValue">100</span>
+                    </div>
+                    <div class="option-group">
+                        <label>Target FPS</label>
+                        <input type="range" id="liveFps" min="1" max="15" value="5">
+                        <span class="range-value" id="liveFpsValue">5</span>
+                    </div>
+                    <div class="option-group">
+                        <label>Font Size</label>
+                        <input type="range" id="liveFontSize" min="4" max="12" value="6">
+                        <span class="range-value" id="liveFontSizeValue">6px</span>
+                    </div>
+                </div>
+
+                <div class="stream-stats" id="streamStats" hidden>
+                    <h2>Statistics</h2>
+                    <p><strong>Frames Processed:</strong> <span id="framesProcessed">0</span></p>
+                    <p><strong>Actual FPS:</strong> <span id="actualFps">0</span></p>
+                    <p><strong>Latency:</strong> <span id="latency">0</span>ms</p>
+                </div>
+            </div>
+
+            <div class="output-panel">
+                <div class="output-header">
+                    <h2>Live ASCII Output</h2>
+                    <div class="live-actions">
+                        <label class="live-preview-toggle">
+                            <input type="checkbox" id="showSourcePreview">
+                            Show source preview
+                        </label>
+                    </div>
+                </div>
+                <div class="live-output-container">
+                    <div class="source-preview" id="sourcePreview" hidden>
+                        <video id="sourceVideo" autoplay muted playsinline></video>
+                        <canvas id="captureCanvas" hidden></canvas>
+                    </div>
+                    <div class="live-ascii-container">
+                        <pre id="liveAsciiOutput" class="ascii-output live-ascii">
+                            <span class="placeholder">Click "Start Screen Capture" to begin...</span>
+                        </pre>
+                    </div>
+                </div>
+            </div>
+        </main>
+
         <!-- Code Export Modal -->
         <div class="modal" id="codeModal" hidden>
             <div class="modal-content">
@@ -374,10 +464,11 @@
         </div>
 
         <footer>
-            <p>Built with Flask, PIL, OpenCV, and NumPy</p>
+            <p>Built with Flask, PIL, OpenCV, NumPy, and SocketIO</p>
         </footer>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

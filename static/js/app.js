@@ -71,6 +71,17 @@ document.addEventListener('DOMContentLoaded', () => {
     let animFps = 12;
     let exportedCode = {};
 
+    // Live capture state
+    let socket = null;
+    let mediaStream = null;
+    let captureCanvas = null;
+    let captureContext = null;
+    let captureInterval = null;
+    let isStreaming = false;
+    let frameCount = 0;
+    let lastFrameTime = 0;
+    let fpsHistory = [];
+
     // Initialize
     init();
 
@@ -84,6 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setupVideoTab();
         setupBulkTab();
         setupAnimationTab();
+        setupLiveTab();
     }
 
     // ============== TAB NAVIGATION ==============
@@ -1185,6 +1197,268 @@ document.addEventListener('DOMContentLoaded', () => {
             URL.revokeObjectURL(url);
 
             showToast(`Downloaded ${filename}!`, 'success');
+        }
+    }
+
+    // ============== LIVE SCREEN CAPTURE TAB ==============
+    function setupLiveTab() {
+        const startCaptureBtn = document.getElementById('startCaptureBtn');
+        const stopCaptureBtn = document.getElementById('stopCaptureBtn');
+        const statusDot = document.querySelector('.status-dot');
+        const statusText = document.getElementById('statusText');
+        const streamStats = document.getElementById('streamStats');
+        const framesProcessed = document.getElementById('framesProcessed');
+        const actualFps = document.getElementById('actualFps');
+        const latencyEl = document.getElementById('latency');
+        const liveAsciiOutput = document.getElementById('liveAsciiOutput');
+        const sourceVideo = document.getElementById('sourceVideo');
+        const sourcePreview = document.getElementById('sourcePreview');
+        const showSourcePreview = document.getElementById('showSourcePreview');
+        captureCanvas = document.getElementById('captureCanvas');
+        captureContext = captureCanvas.getContext('2d');
+
+        // Settings
+        const liveWidthSlider = document.getElementById('liveWidth');
+        const liveWidthValue = document.getElementById('liveWidthValue');
+        const liveFpsSlider = document.getElementById('liveFps');
+        const liveFpsValue = document.getElementById('liveFpsValue');
+        const liveFontSizeSlider = document.getElementById('liveFontSize');
+        const liveFontSizeValue = document.getElementById('liveFontSizeValue');
+        const liveConverterList = document.getElementById('liveConverterList');
+
+        let liveConverter = 'brightness';
+        let targetFps = 5;
+        let asciiWidth = 100;
+
+        // Initialize SocketIO connection
+        function initSocket() {
+            if (socket) return;
+
+            socket = io();
+
+            socket.on('connect', () => {
+                console.log('Socket connected');
+                statusDot.classList.remove('disconnected');
+                statusDot.classList.add('connected');
+                statusText.textContent = 'Connected';
+            });
+
+            socket.on('disconnect', () => {
+                console.log('Socket disconnected');
+                statusDot.classList.remove('connected', 'streaming');
+                statusDot.classList.add('disconnected');
+                statusText.textContent = 'Disconnected';
+                stopCapture();
+            });
+
+            socket.on('connected', (data) => {
+                console.log('Server confirmed connection:', data);
+            });
+
+            socket.on('stream_started', (data) => {
+                console.log('Stream started:', data);
+                statusDot.classList.remove('connected');
+                statusDot.classList.add('streaming');
+                statusText.textContent = 'Streaming';
+                streamStats.hidden = false;
+            });
+
+            socket.on('stream_stopped', (data) => {
+                console.log('Stream stopped:', data);
+                statusDot.classList.remove('streaming');
+                statusDot.classList.add('connected');
+                statusText.textContent = 'Connected';
+            });
+
+            socket.on('ascii_frame', (data) => {
+                // Update ASCII output
+                liveAsciiOutput.textContent = data.ascii;
+                frameCount = data.frame_number;
+                framesProcessed.textContent = frameCount;
+
+                // Calculate FPS
+                const now = Date.now();
+                if (lastFrameTime > 0) {
+                    const frameDelta = now - lastFrameTime;
+                    fpsHistory.push(1000 / frameDelta);
+                    if (fpsHistory.length > 10) fpsHistory.shift();
+                    const avgFps = fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length;
+                    actualFps.textContent = avgFps.toFixed(1);
+                }
+                lastFrameTime = now;
+
+                // Calculate latency
+                if (data.timestamp) {
+                    const latency = now - data.timestamp;
+                    latencyEl.textContent = latency;
+                }
+            });
+
+            socket.on('error', (data) => {
+                console.error('Socket error:', data);
+                showToast(data.message || 'Stream error', 'error');
+            });
+        }
+
+        // Slider events
+        liveWidthSlider.addEventListener('input', () => {
+            asciiWidth = parseInt(liveWidthSlider.value);
+            liveWidthValue.textContent = asciiWidth;
+            if (isStreaming && socket) {
+                socket.emit('update_settings', { width: asciiWidth });
+            }
+        });
+
+        liveFpsSlider.addEventListener('input', () => {
+            targetFps = parseInt(liveFpsSlider.value);
+            liveFpsValue.textContent = targetFps;
+            if (isStreaming) {
+                // Restart capture with new FPS
+                clearInterval(captureInterval);
+                captureInterval = setInterval(captureFrame, 1000 / targetFps);
+            }
+        });
+
+        liveFontSizeSlider.addEventListener('input', () => {
+            const size = liveFontSizeSlider.value;
+            liveFontSizeValue.textContent = `${size}px`;
+            liveAsciiOutput.style.fontSize = `${size}px`;
+        });
+
+        // Converter selection
+        liveConverterList.addEventListener('change', (e) => {
+            if (e.target.name === 'liveConverter') {
+                liveConverter = e.target.value;
+                if (isStreaming && socket) {
+                    socket.emit('update_settings', { converter: liveConverter });
+                }
+            }
+        });
+
+        // Source preview toggle
+        showSourcePreview.addEventListener('change', () => {
+            sourcePreview.hidden = !showSourcePreview.checked;
+        });
+
+        // Start capture button
+        startCaptureBtn.addEventListener('click', startCapture);
+        stopCaptureBtn.addEventListener('click', stopCapture);
+
+        async function startCapture() {
+            try {
+                // Initialize socket if needed
+                initSocket();
+
+                // Request screen capture
+                mediaStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: {
+                        cursor: 'always',
+                        displaySurface: 'monitor'
+                    },
+                    audio: false
+                });
+
+                // Set up video element
+                sourceVideo.srcObject = mediaStream;
+                await sourceVideo.play();
+
+                // Get video dimensions
+                const videoTrack = mediaStream.getVideoTracks()[0];
+                const settings = videoTrack.getSettings();
+                const videoWidth = settings.width || 1920;
+                const videoHeight = settings.height || 1080;
+
+                // Set canvas size (scaled down for performance)
+                const scale = Math.min(1, 800 / videoWidth);
+                captureCanvas.width = Math.floor(videoWidth * scale);
+                captureCanvas.height = Math.floor(videoHeight * scale);
+
+                // Handle stream ending (user clicks "Stop sharing")
+                videoTrack.onended = () => {
+                    stopCapture();
+                };
+
+                // Start streaming to server
+                socket.emit('start_stream', {
+                    converter: liveConverter,
+                    width: asciiWidth,
+                    options: {}
+                });
+
+                isStreaming = true;
+                frameCount = 0;
+                lastFrameTime = 0;
+                fpsHistory = [];
+
+                // Start capturing frames
+                captureInterval = setInterval(captureFrame, 1000 / targetFps);
+
+                // Update UI
+                startCaptureBtn.disabled = true;
+                stopCaptureBtn.disabled = false;
+                liveAsciiOutput.innerHTML = '<span class="placeholder">Waiting for first frame...</span>';
+
+                showToast('Screen capture started!', 'success');
+
+            } catch (error) {
+                console.error('Failed to start capture:', error);
+                if (error.name === 'NotAllowedError') {
+                    showToast('Screen capture permission denied', 'error');
+                } else {
+                    showToast('Failed to start screen capture: ' + error.message, 'error');
+                }
+            }
+        }
+
+        function captureFrame() {
+            if (!isStreaming || !mediaStream) return;
+
+            try {
+                // Draw video frame to canvas
+                captureContext.drawImage(sourceVideo, 0, 0, captureCanvas.width, captureCanvas.height);
+
+                // Convert to base64
+                const imageData = captureCanvas.toDataURL('image/jpeg', 0.7);
+
+                // Send to server
+                socket.emit('frame', {
+                    image: imageData,
+                    timestamp: Date.now()
+                });
+            } catch (error) {
+                console.error('Frame capture error:', error);
+            }
+        }
+
+        function stopCapture() {
+            isStreaming = false;
+
+            // Stop capture interval
+            if (captureInterval) {
+                clearInterval(captureInterval);
+                captureInterval = null;
+            }
+
+            // Stop media stream
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+
+            // Clear video
+            sourceVideo.srcObject = null;
+
+            // Tell server to stop
+            if (socket && socket.connected) {
+                socket.emit('stop_stream');
+            }
+
+            // Update UI
+            startCaptureBtn.disabled = false;
+            stopCaptureBtn.disabled = true;
+            streamStats.hidden = true;
+
+            showToast('Screen capture stopped', 'success');
         }
     }
 });

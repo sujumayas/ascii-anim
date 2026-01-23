@@ -39,6 +39,18 @@ A Flask web application that converts images to ASCII art using 5 different algo
   - **Python (Terminal)** - Terminal-based animation player
   - **Pygame** - Game-ready animation code
 
+### Live Screen Capture (NEW!)
+- **Real-time screen capture** using browser's Screen Capture API
+- **WebSocket streaming** for low-latency ASCII conversion
+- **Live preview** of your screen as ASCII art
+- **Adjustable settings:**
+  - ASCII width (40-200 characters)
+  - Target FPS (1-15)
+  - Font size
+  - Choice of conversion algorithm
+- **Statistics display** showing frames processed, actual FPS, and latency
+- Optional source preview overlay
+
 ## Installation
 
 ```bash
@@ -60,7 +72,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 python app.py
 ```
 
-Open http://localhost:5000 in your browser.
+Open http://localhost:5001 in your browser.
 
 ## API Endpoints
 
@@ -87,6 +99,13 @@ Open http://localhost:5000 in your browser.
 - `POST /api/animation/export-code` - Generate exportable code (HTML/JS, React, Python, Pygame)
 - `POST /api/animation/cleanup` - Clean up animation files
 
+### Live Screen Capture (WebSocket)
+- `socket.emit('start_stream')` - Start streaming session with converter settings
+- `socket.emit('frame')` - Send a captured frame for conversion
+- `socket.emit('stop_stream')` - Stop streaming session
+- `socket.emit('update_settings')` - Update converter or width on the fly
+- `socket.on('ascii_frame')` - Receive converted ASCII frame
+
 ## Project Structure
 
 ```
@@ -111,9 +130,11 @@ Open http://localhost:5000 in your browser.
 
 - Python 3.8+
 - Flask
+- Flask-SocketIO (for real-time streaming)
 - Pillow
 - NumPy
 - OpenCV
+- gevent (async WebSocket support)
 
 ## License
 
